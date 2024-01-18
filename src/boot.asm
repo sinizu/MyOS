@@ -1,40 +1,47 @@
 ; 代码在内存中的位置
 [org 0x7c00]
 
-; 设置屏幕模式为文本模式，清除屏幕
+; 设置屏幕为文本模式，清除屏幕
 mov ax, 3
 int 0x10
 
-; 初始化段寄存器，（如果不初始化会出错）
+; 初始化寄存器
 mov ax, 0
 mov ds, ax
 mov es, ax
 mov ss, ax
-; 初始化栈的位置
 mov sp, 0x7c00
 
-; 初始化数据段的位置，0xb8000 文本显示器的内存区域
-mov ax, 0xb800
-mov ds, ax
-; 显示一个H
-mov byte [0], 'H'
-mov byte [2], 'e'
-mov byte [4], 'l'
-mov byte [6], 'l'
-mov byte [8], 'o'
-mov byte [10], ','
-mov byte [12], 'w'
-mov byte [14], 'o'
-mov byte [16], 'r'
-mov byte [18], 'l'
-mov byte [20], 'd'
-mov byte [22], '!'
+; bochs 的魔术断点
+xchg bx, bx
+
+
+mov si, booting
+call print
 
 
 ; 阻塞
 jmp $
 
-; 填充 0 (除开最后两个字节外，从开头到现在)
+print:
+    mov ah, 0x0e
+.next:
+    mov al, [si]
+    cmp al, 0
+    jz .done
+    ; 打印到屏幕
+    int 0x10
+    ; 将si移动到下一个字符
+    inc si
+    jmp .next
+.done:
+    ret
+
+
+booting:
+    db "Booting MyOS...", 10, 13, 0; \n\r
+
+; 填充 0
 times 510 - ($ - $$) db 0
 
 ; 主引导扇区的最后两个字节必须是0x55, 0xaa
