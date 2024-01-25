@@ -12,16 +12,106 @@ mov es, ax
 mov ss, ax
 mov sp, 0x7c00
 
-; bochs 的魔术断点
-xchg bx, bx
-
 
 mov si, booting
 call print
 
+; bochs 的魔术断点
+xchg bx, bx
+
+mov edi, 0x1000 ; 读取目标内存
+mov ecx, 0 ; 起始扇区(其中应当包含3*8=24位的信息)
+mov bl, 1 ; 扇区数量
+call read_disk
+
+; bochs 的魔术断点
+xchg bx, bx
 
 ; 阻塞
 jmp $
+
+read_disk:
+    ; 1.设置读写扇区的数量
+    mov dx, 0x1f2
+    mov al, bl
+    out dx, al
+
+    ; 2.起始扇区的前八位
+    inc dx; 0x1f3
+    mov al, cl
+    out dx, al 
+
+    ; 3.起始扇区的中八位
+    inc dx ; 0x1f4
+    shr ecx, 8; 保证cl是对应的ecx的中8位
+    mov al, cl
+    out dx, al 
+
+    ; 4.起始扇区的高八位
+    inc dx; 0x1f5
+    shr ecx, 8; 
+    mov al, cl
+    out dx, al 
+
+    ; 5.主盘 - LBA模式
+    inc dx; 0x1f6
+    shr ecx, 8
+    and cl, 0b0000_1111; 将高4位置为零，注意是二进制
+    mov al, 0b1110_0000; 
+    or al, cl
+    out dx, al
+
+    ; 6.开始读硬盘
+    inc dx; 0x1f7
+    mov al, 0x20; 读硬盘
+    out dx, al
+
+    xor ecx, ecx; ecx值为零，性能比较高
+    ; loop指令用来实现循环功能，cx (寄存器)存放循环次数
+    mov cl, bl; 得到读写扇区的数量
+
+    ; .开头的事函数内部的标记点，不是函数
+    .read:
+        push cx; 因为.read内部会将cx进行修改
+        call .waits; 等待数据准备完毕
+        call .reads; 读取一个扇区
+        pop cx
+        loop .read
+
+    ret
+
+    .waits:
+        mov dx, 0x1f7
+        .check:
+            in al, dx; 从端口输入
+            jmp $ + 2; nop 直接跳转到下一行
+            jmp $ + 2; 作用是给一定延迟
+            jmp $ + 2
+
+            and al, 0b1000_1000; 保留第3位和第7位
+            cmp al, 0b0000_1000; 取出第3位
+            jnz .check; 如果第3位不满足条件会一直check
+
+        ret
+
+    .reads:
+        ; 用于读写数据的端口
+        mov dx, 0x1f0
+        mov cx, 256; 一个扇区256 字
+        .readw:
+            in ax, dx
+            jmp $ + 2; nop 直接跳转到下一行
+            jmp $ + 2; 作用是给一定延迟
+            jmp $ + 2
+            mov [edi], ax; 将值读取到目标内存中
+            add edi, 2; 移动到下一个地址，但是为什么是2？？
+
+            loop .readw
+        ret
+
+write_disk:
+    ; TODO
+
 
 print:
     mov ah, 0x0e
