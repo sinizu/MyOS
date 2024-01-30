@@ -20,9 +20,16 @@ call print
 xchg bx, bx
 
 mov edi, 0x1000 ; 读取目标内存
-mov ecx, 0 ; 起始扇区(其中应当包含3*8=24位的信息)
-mov bl, 1 ; 扇区数量
+mov ecx, 2 ; 起始扇区(其中应当包含3*8=24位的信息)
+mov bl, 4 ; 扇区数量
 call read_disk
+
+; 魔术字的错误保护
+cmp word [0x1000], 0x55aa
+jnz error
+
+; 将魔术字跳过
+jmp 0:0x1002
 
 ; bochs 的魔术断点
 xchg bx, bx
@@ -130,6 +137,13 @@ print:
 
 booting:
     db "Booting MyOS...", 10, 13, 0; \n\r
+
+error:
+    mov si, .msg
+    call print
+    hlt; 让CPU停止
+    jmp $
+    .msg db "Booting Error!", 10, 13, 0; \n\r
 
 ; 填充 0
 times 510 - ($ - $$) db 0
